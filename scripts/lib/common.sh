@@ -8,6 +8,13 @@ K8S_VERSION="${K8S_VERSION:-v1.29}"
 PAUSE_IMAGE="${PAUSE_IMAGE:-registry.k8s.io/pause:3.9}"
 CLUSTER_SUBNET="${CLUSTER_SUBNET:-10.0.0.}"
 IFACE="${IFACE:-enp0s8}"
+GATEWAY="${GATEWAY:-${CLUSTER_SUBNET}1}"
+PREFIX_LEN="${PREFIX_LEN:-24}"
+# Nodes claim their address from this range (last octet), outside normal DHCP use.
+STATIC_FIRST="${STATIC_FIRST:-3}"
+STATIC_LAST="${STATIC_LAST:-19}"
+
+NETPLAN_FILE="/etc/netplan/60-k8s-static.yaml"
 
 LEGACY_CRI_SOCKET="unix:///var/run/cri-dockerd.sock"
 
@@ -39,13 +46,123 @@ wait_for() {
     done
 }
 
-# Prints the IPv4 address of $IFACE and checks it is on the cluster subnet.
-detect_node_ip() {
+# ---- Static IP claiming ----
+# The VLAN's DHCP pool can't give stable addresses, so each node claims a free
+# address in ${CLUSTER_SUBNET}${STATIC_FIRST}-${STATIC_LAST} and pins it with netplan.
+
+ensure_network_tools() {
+    command -v arping >/dev/null && command -v nc >/dev/null && command -v curl >/dev/null && return 0
+    echo "📦 Installing network tools..."
+    apt-get update
+    apt-get install -y iputils-arping netcat-openbsd curl
+}
+
+# ARP duplicate-address probe: succeeds if some host answers for the IP.
+# Unlike ping, hosts can't ignore ARP, so firewalled machines are still seen.
+ip_in_use() {
+    ! arping -D -q -c 2 -w 3 -I "$IFACE" "$1" >/dev/null 2>&1
+}
+
+# Prints the address this script pinned on a previous run, if still active.
+configured_static_ip() {
+    [[ -f "$NETPLAN_FILE" ]] || return 1
     local ip
-    ip="$(ip -4 -o addr show "$IFACE" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
-    [[ -n "$ip" ]] || die "Could not find IPv4 address on $IFACE"
-    [[ "$ip" == "${CLUSTER_SUBNET}"* ]] || die "Wrong network detected on $IFACE: $ip (expected ${CLUSTER_SUBNET}x)"
+    ip="$(grep -oE "${CLUSTER_SUBNET//./\\.}[0-9]+/" "$NETPLAN_FILE" | head -n1 | tr -d /)"
+    [[ -n "$ip" ]] && ip -4 -o addr show "$IFACE" | grep -q " ${ip}/" || return 1
     echo "$ip"
+}
+
+# find_free_ip [ip-to-skip...]
+find_free_ip() {
+    local octet ip skip
+    for ((octet = STATIC_FIRST; octet <= STATIC_LAST; octet++)); do
+        ip="${CLUSTER_SUBNET}${octet}"
+        for skip in "$@"; do
+            [[ "$ip" == "$skip" ]] && continue 2
+        done
+        if ! ip_in_use "$ip"; then
+            echo "$ip"
+            return 0
+        fi
+    done
+    return 1
+}
+
+apply_static_ip() {
+    local ip="$1" ssh_ip dns route_line="" dns_line=""
+
+    # Switching address cuts off an SSH session that uses the old one, which
+    # would kill this script halfway. tmux/screen sessions survive that.
+    if [[ -n "${SSH_CONNECTION:-}" && -z "${TMUX:-}${STY:-}" ]]; then
+        ssh_ip="$(awk '{print $3}' <<<"$SSH_CONNECTION")"
+        if ip -4 -o addr show "$IFACE" | grep -q " ${ssh_ip}/"; then
+            die "Changing $IFACE to $ip would drop this SSH session. Run from the VM console or inside tmux."
+        fi
+    fi
+
+    # Keep the default route and DNS on this NIC if DHCP had put them here.
+    if [[ -n "$(ip -4 route show default dev "$IFACE" 2>/dev/null)" ]]; then
+        route_line="      routes: [{to: default, via: ${GATEWAY}}]"
+        dns="$(resolvectl dns "$IFACE" 2>/dev/null | cut -d: -f2- | xargs | tr ' ' ',')"
+        dns_line="      nameservers: {addresses: [${dns:-$GATEWAY}]}"
+    fi
+
+    echo "🔧 Pinning $IFACE to ${ip}/${PREFIX_LEN}..."
+    cat >"$NETPLAN_FILE" <<EOF
+# Written by Kubernetes setup scripts: static cluster address.
+network:
+  version: 2
+  ethernets:
+    ${IFACE}:
+      dhcp4: false
+      addresses: [${ip}/${PREFIX_LEN}]
+${route_line}
+${dns_line}
+EOF
+    chmod 600 "$NETPLAN_FILE"
+    netplan apply
+
+    wait_for 30 "$ip on $IFACE" bash -c "ip -4 -o addr show '$IFACE' | grep -q ' ${ip}/'"
+
+    # Drop any leftover DHCP lease so Flannel/kubelet only see the static IP.
+    local old
+    for old in $(ip -4 -o addr show "$IFACE" | awk '{print $4}'); do
+        [[ "$old" == "${ip}/"* ]] || ip addr del "$old" dev "$IFACE" || true
+    done
+
+    # Catch a race with another node that probed at the same moment.
+    if ip_in_use "$ip"; then
+        die "Another host also answers for $ip. Remove $NETPLAN_FILE and re-run."
+    fi
+}
+
+# ensure_static_ip [ip-to-skip...]: sets NODE_IP to this node's pinned address,
+# claiming the first free one in the static range if it has none yet.
+ensure_static_ip() {
+    ensure_network_tools
+    if NODE_IP="$(configured_static_ip)"; then
+        echo "✅ Keeping static IP $NODE_IP"
+        return 0
+    fi
+    echo "🔍 Probing ${CLUSTER_SUBNET}${STATIC_FIRST}-${STATIC_LAST} for a free address..."
+    NODE_IP="$(find_free_ip "$@")" ||
+        die "No free address in ${CLUSTER_SUBNET}${STATIC_FIRST}-${STATIC_LAST}"
+    apply_static_ip "$NODE_IP"
+    echo "✅ Claimed $NODE_IP"
+}
+
+# Prints the first address in the static range that serves the Kubernetes API.
+find_master() {
+    local octet ip
+    for ((octet = STATIC_FIRST; octet <= STATIC_LAST; octet++)); do
+        ip="${CLUSTER_SUBNET}${octet}"
+        nc -z -w 1 "$ip" 6443 >/dev/null 2>&1 || continue
+        if curl -sk --max-time 3 "https://${ip}:6443/version" | grep -q '"gitVersion"'; then
+            echo "$ip"
+            return 0
+        fi
+    done
+    return 1
 }
 
 set_hostname() {

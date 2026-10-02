@@ -6,7 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-MASTER_IP="${MASTER_IP:-${CLUSTER_SUBNET}3}"
 MASTER_HOSTNAME="${MASTER_HOSTNAME:-master}"
 POD_CIDR="${POD_CIDR:-10.244.0.0/16}"
 FLANNEL_MANIFEST="${FLANNEL_MANIFEST:-https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml}"
@@ -14,8 +13,8 @@ FLANNEL_MANIFEST="${FLANNEL_MANIFEST:-https://github.com/flannel-io/flannel/rele
 require_root
 banner "Kubernetes Master Setup"
 
-NODE_IP="$(detect_node_ip)"
-[[ "$NODE_IP" == "$MASTER_IP" ]] || die "$IFACE has IP $NODE_IP, expected master IP $MASTER_IP"
+ensure_static_ip
+MASTER_IP="$NODE_IP"
 echo "✅ Master IP: $MASTER_IP"
 
 echo "🔧 Setting hostname to $MASTER_HOSTNAME..."
