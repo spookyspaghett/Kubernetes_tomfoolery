@@ -1,7 +1,7 @@
 # Kubernetes tomfoolery
 
 Scripts that build a small kubeadm cluster (1 master, up to 3 workers) on
-Ubuntu/Debian VMs, using Docker + cri-dockerd as the runtime and Flannel as the CNI.
+Ubuntu/Debian VMs, using containerd as the runtime and Flannel as the CNI.
 
 ## Network layout
 
@@ -26,7 +26,9 @@ Copy the whole `scripts/` directory (including `lib/`) to every node.
    ```
 
 Both scripts **wipe any existing Kubernetes state** on the node before setting it up,
-so they can be re-run to rebuild a node from scratch.
+so they can be re-run to rebuild a node from scratch. Nodes set up by the older
+Docker + cri-dockerd version of these scripts are migrated automatically (cri-dockerd
+is removed and Docker is stopped and disabled).
 
 ### SSH requirement for workers
 
@@ -52,6 +54,5 @@ Defaults can be overridden with environment variables, e.g.
 | `CLUSTER_SUBNET`     | `192.168.10.`      | both           |
 | `POD_CIDR`           | `10.244.0.0/16`    | master         |
 | `K8S_VERSION`        | `v1.29`            | both           |
-| `CRICTL_VERSION`     | `v1.29.0`          | both           |
-| `CRIDOCKERD_VERSION` | `0.3.15`           | both           |
 | `FLANNEL_MANIFEST`   | latest release URL | master         |
+| `PAUSE_IMAGE`        | `registry.k8s.io/pause:3.9` | both    |
