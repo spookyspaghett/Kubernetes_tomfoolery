@@ -11,24 +11,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-# Leave MASTER_IP unset to auto-discover the master in the static range.
-MASTER_IP="${MASTER_IP:-}"
 MASTER_USER="${MASTER_USER:-osboxes}"
 
 require_root
 banner "Kubernetes Worker Setup"
-
-ensure_network_tools
-
-if [[ -z "$MASTER_IP" ]]; then
-    echo "🔍 Looking for the master in ${CLUSTER_SUBNET}${STATIC_FIRST}-${STATIC_LAST}..."
-    deadline=$((SECONDS + 600))
-    until MASTER_IP="$(find_master)"; do
-        ((SECONDS < deadline)) || die "No Kubernetes API found on port 6443; is the master set up?"
-        sleep 5
-    done
-fi
-echo "✅ Master: $MASTER_IP"
 
 ensure_static_ip "$MASTER_IP"
 
@@ -54,8 +40,8 @@ master_ssh() {
     fi
 }
 
-echo "⏳ Checking master API at ${MASTER_IP}:6443..."
-wait_for 60 "the master API server" nc -z "$MASTER_IP" 6443
+echo "⏳ Waiting for master API at ${MASTER_IP}:6443..."
+wait_for 600 "the master API server" nc -z "$MASTER_IP" 6443
 
 echo "🔐 Testing SSH access to master..."
 master_ssh "sudo -n true" ||

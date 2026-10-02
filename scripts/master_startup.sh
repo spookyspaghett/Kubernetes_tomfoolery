@@ -13,8 +13,7 @@ FLANNEL_MANIFEST="${FLANNEL_MANIFEST:-https://github.com/flannel-io/flannel/rele
 require_root
 banner "Kubernetes Master Setup"
 
-ensure_static_ip
-MASTER_IP="$NODE_IP"
+claim_ip "$MASTER_IP"
 echo "✅ Master IP: $MASTER_IP"
 
 echo "🔧 Setting hostname to $MASTER_HOSTNAME..."

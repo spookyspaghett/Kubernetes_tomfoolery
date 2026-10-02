@@ -8,9 +8,11 @@ K8S_VERSION="${K8S_VERSION:-v1.29}"
 PAUSE_IMAGE="${PAUSE_IMAGE:-registry.k8s.io/pause:3.9}"
 CLUSTER_SUBNET="${CLUSTER_SUBNET:-10.0.0.}"
 IFACE="${IFACE:-enp0s8}"
+MASTER_IP="${MASTER_IP:-${CLUSTER_SUBNET}3}"
 GATEWAY="${GATEWAY:-${CLUSTER_SUBNET}1}"
 PREFIX_LEN="${PREFIX_LEN:-24}"
-# Nodes claim their address from this range (last octet), outside normal DHCP use.
+# Workers claim the first free address in this range (last octet), skipping the
+# master. Keep it outside the DHCP pool.
 STATIC_FIRST="${STATIC_FIRST:-3}"
 STATIC_LAST="${STATIC_LAST:-19}"
 
@@ -154,9 +156,15 @@ check_conflicting_netplan() {
 ensure_static_ip() {
     check_conflicting_netplan
     ensure_network_tools
+    local skip
     if NODE_IP="$(configured_static_ip)"; then
-        echo "✅ Keeping static IP $NODE_IP"
-        return 0
+        for skip in "$@"; do
+            [[ "$NODE_IP" == "$skip" ]] && NODE_IP="" && break
+        done
+        if [[ -n "$NODE_IP" ]]; then
+            echo "✅ Keeping static IP $NODE_IP"
+            return 0
+        fi
     fi
     echo "🔍 Probing ${CLUSTER_SUBNET}${STATIC_FIRST}-${STATIC_LAST} for a free address..."
     NODE_IP="$(find_free_ip "$@")" ||
@@ -165,18 +173,19 @@ ensure_static_ip() {
     echo "✅ Claimed $NODE_IP"
 }
 
-# Prints the first address in the static range that serves the Kubernetes API.
-find_master() {
-    local octet ip
-    for ((octet = STATIC_FIRST; octet <= STATIC_LAST; octet++)); do
-        ip="${CLUSTER_SUBNET}${octet}"
-        nc -z -w 1 "$ip" 6443 >/dev/null 2>&1 || continue
-        if curl -sk --max-time 3 "https://${ip}:6443/version" | grep -q '"gitVersion"'; then
-            echo "$ip"
-            return 0
-        fi
-    done
-    return 1
+# claim_ip <ip>: sets NODE_IP to exactly this address (used for the master).
+claim_ip() {
+    local want="$1"
+    check_conflicting_netplan
+    ensure_network_tools
+    NODE_IP="$want"
+    if [[ "$(configured_static_ip || true)" == "$want" ]]; then
+        echo "✅ Keeping static IP $want"
+        return 0
+    fi
+    ip_in_use "$want" && die "$want is already used by another host on the network"
+    apply_static_ip "$want"
+    echo "✅ Claimed $want"
 }
 
 set_hostname() {
