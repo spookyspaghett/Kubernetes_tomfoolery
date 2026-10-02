@@ -136,9 +136,23 @@ EOF
     fi
 }
 
+# netplan merges all files, so a fixed address for $IFACE in another file
+# (e.g. a leftover 192.168.10.x config) would stack on top of ours.
+check_conflicting_netplan() {
+    local f
+    for f in /etc/netplan/*.yaml; do
+        [[ -f "$f" && "$f" != "$NETPLAN_FILE" ]] || continue
+        grep -q "^[[:space:]]*${IFACE}:" "$f" || continue
+        if grep -v 'to:' "$f" | grep -qE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+'; then
+            die "$f sets a static address on $IFACE. Remove it (or switch that block to 'dhcp4: true'), run 'netplan apply', then re-run."
+        fi
+    done
+}
+
 # ensure_static_ip [ip-to-skip...]: sets NODE_IP to this node's pinned address,
 # claiming the first free one in the static range if it has none yet.
 ensure_static_ip() {
+    check_conflicting_netplan
     ensure_network_tools
     if NODE_IP="$(configured_static_ip)"; then
         echo "✅ Keeping static IP $NODE_IP"

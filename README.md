@@ -5,8 +5,8 @@ Ubuntu/Debian VMs, using containerd as the runtime and Flannel as the CNI.
 
 ## Network layout
 
-The VLAN is `10.0.0.0/24`: gateway `10.0.0.1`, DHCP server `10.0.0.2` handing out
-`.3`–`.254`. DHCP leases aren't stable enough for Kubernetes, so each node claims
+The VLAN is `10.0.0.0/24` (VirtualBox host-only adapter at `10.0.0.1`, DHCP server
+`10.0.0.2` handing out `.20`–`.254`). DHCP leases aren't stable enough for Kubernetes, so each node claims
 a static address itself:
 
 1. It probes `10.0.0.3`–`10.0.0.19` with ARP (`arping`, which also sees hosts that
@@ -22,9 +22,10 @@ Workers find the master by scanning the same range for a Kubernetes API on port
 > **Run the scripts from the VM console or inside `tmux`.** Switching address drops
 > an SSH session on the old DHCP address; the scripts refuse to start in that case.
 
-**Caveat:** `.3`–`.19` are still inside the DHCP pool. Most DHCP servers check that
-an address is unused before offering it, but if you can, exclude `.3`–`.19` from the
-pool (or add reservations) so nothing else is ever handed one of these addresses.
+The VirtualBox DHCP server's pool must start above the static range (e.g. `.20`–`.254`)
+so it never hands out a node's address. Any old static address for the cluster NIC
+in another `/etc/netplan/*.yaml` file must be removed; the scripts refuse to run
+until it is.
 
 ## Usage
 
