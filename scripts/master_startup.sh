@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-MASTER_IP="${MASTER_IP:-192.168.10.3}"
+MASTER_IP="${MASTER_IP:-${CLUSTER_SUBNET}3}"
 MASTER_HOSTNAME="${MASTER_HOSTNAME:-master}"
 POD_CIDR="${POD_CIDR:-10.244.0.0/16}"
 FLANNEL_MANIFEST="${FLANNEL_MANIFEST:-https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml}"

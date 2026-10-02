@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-MASTER_IP="${MASTER_IP:-192.168.10.3}"
+MASTER_IP="${MASTER_IP:-${CLUSTER_SUBNET}3}"
 MASTER_USER="${MASTER_USER:-osboxes}"
 
 require_root
@@ -20,10 +20,10 @@ banner "Kubernetes Worker Setup"
 echo "🔍 Detecting node IP..."
 NODE_IP="$(detect_node_ip)"
 
-case "$NODE_IP" in
-    192.168.10.4) HOSTNAME_VALUE="worker1" ;;
-    192.168.10.5) HOSTNAME_VALUE="worker2" ;;
-    192.168.10.6) HOSTNAME_VALUE="worker3" ;;
+case "${NODE_IP##*.}" in
+    4) HOSTNAME_VALUE="worker1" ;;
+    5) HOSTNAME_VALUE="worker2" ;;
+    6) HOSTNAME_VALUE="worker3" ;;
     *) die "Unknown worker IP: $NODE_IP" ;;
 esac
 

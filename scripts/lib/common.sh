@@ -6,7 +6,7 @@
 CRI_SOCKET="${CRI_SOCKET:-unix:///run/containerd/containerd.sock}"
 K8S_VERSION="${K8S_VERSION:-v1.29}"
 PAUSE_IMAGE="${PAUSE_IMAGE:-registry.k8s.io/pause:3.9}"
-CLUSTER_SUBNET="${CLUSTER_SUBNET:-192.168.10.}"
+CLUSTER_SUBNET="${CLUSTER_SUBNET:-10.0.0.}"
 IFACE="${IFACE:-enp0s8}"
 
 LEGACY_CRI_SOCKET="unix:///var/run/cri-dockerd.sock"
