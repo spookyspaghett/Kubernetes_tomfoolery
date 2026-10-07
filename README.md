@@ -63,6 +63,19 @@ asking for `MASTER_USER`'s password once. It also adds a sudoers rule on the mas
 (`/etc/sudoers.d/kubeadm-join`) letting `MASTER_USER` run `kubeadm` without a sudo
 password, which prompts for that password once more.
 
+### Testing the cluster
+
+Once the workers have joined, run this on the master:
+
+```bash
+./scripts/test_cluster.sh          # run checks, deploy nginx, then clean up
+./scripts/test_cluster.sh --keep   # leave the app running (NodePort 30080)
+```
+
+It checks that all nodes are Ready and system pods are healthy, deploys nginx
+with one replica per node, then verifies the NodePort on every node and in-cluster
+DNS from a pod. It exits non-zero if any check fails.
+
 ## Configuration
 
 Defaults can be overridden with environment variables, e.g.
