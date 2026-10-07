@@ -31,8 +31,7 @@ prepare_node "$NODE_IP"
 
 # Run ssh as the user who invoked sudo so their SSH keys are used.
 master_ssh() {
-    local -a cmd=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10
-        "${MASTER_USER}@${MASTER_IP}" "$@")
+    local -a cmd=(ssh "${MASTER_USER}@${MASTER_IP}" -i kubernetes_worker* "$@")
     if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
         sudo -u "$SUDO_USER" -- "${cmd[@]}"
     else
