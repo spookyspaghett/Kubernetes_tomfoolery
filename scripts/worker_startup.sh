@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-MASTER_USER="${MASTER_USER:-osboxes}"
+MASTER_USER="${MASTER_USER:-kubernetes_master}"
 
 require_root
 banner "Kubernetes Worker Setup"
