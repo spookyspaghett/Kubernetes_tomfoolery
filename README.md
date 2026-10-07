@@ -56,13 +56,11 @@ is removed and Docker is stopped and disabled).
 
 ### SSH requirement for workers
 
-Workers fetch a fresh join command from the master over SSH. The user that runs
-`sudo` on the worker needs key-based access to `osboxes@10.0.0.3`, and that user
-needs passwordless sudo on the master:
-
-```bash
-ssh-copy-id osboxes@10.0.0.3
-```
+Workers fetch a fresh join command from the master over SSH. The worker script
+sets this up itself: it generates `~/.ssh/kubernetes_worker` for the user that ran
+`sudo` (override with `SSH_KEY`) and installs it on the master with `ssh-copy-id`,
+asking for `MASTER_USER`'s password once. `MASTER_USER` still needs passwordless
+sudo on the master.
 
 ## Configuration
 
