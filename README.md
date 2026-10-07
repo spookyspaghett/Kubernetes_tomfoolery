@@ -59,8 +59,9 @@ is removed and Docker is stopped and disabled).
 Workers fetch a fresh join command from the master over SSH. The worker script
 sets this up itself: it generates `~/.ssh/kubernetes_worker` for the user that ran
 `sudo` (override with `SSH_KEY`) and installs it on the master with `ssh-copy-id`,
-asking for `MASTER_USER`'s password once. `MASTER_USER` still needs passwordless
-sudo on the master.
+asking for `MASTER_USER`'s password once. It also adds a sudoers rule on the master
+(`/etc/sudoers.d/kubeadm-join`) letting `MASTER_USER` run `kubeadm` without a sudo
+password, which prompts for that password once more.
 
 ## Configuration
 

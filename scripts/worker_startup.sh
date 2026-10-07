@@ -61,8 +61,14 @@ if ! master_ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new true 2>/dev
         "${MASTER_USER}@${MASTER_IP}" ||
         die "Could not copy SSH key to ${MASTER_USER}@${MASTER_IP}"
 fi
-master_ssh -o BatchMode=yes "sudo -n true" ||
-    die "Cannot SSH to ${MASTER_USER}@${MASTER_IP} with passwordless sudo (give ${MASTER_USER} NOPASSWD sudo on the master)"
+if ! master_ssh -o BatchMode=yes "sudo -n kubeadm version" >/dev/null 2>&1; then
+    echo "🛡️  Allowing ${MASTER_USER} to run kubeadm without a sudo password (enter it once)..."
+    SUDOERS_FILE="/etc/sudoers.d/kubeadm-join"
+    SUDOERS_LINE="${MASTER_USER} ALL=(root) NOPASSWD: /usr/bin/kubeadm"
+    # -t gives sudo a terminal so it can prompt; the tmp file is validated before install.
+    master_ssh -t "sudo sh -c 'echo \"${SUDOERS_LINE}\" > ${SUDOERS_FILE}.tmp && visudo -cf ${SUDOERS_FILE}.tmp && chmod 440 ${SUDOERS_FILE}.tmp && mv ${SUDOERS_FILE}.tmp ${SUDOERS_FILE}'" ||
+        die "Could not configure sudo on ${MASTER_IP}"
+fi
 
 echo "🔑 Getting fresh join command from master..."
 JOIN_COMMAND="$(master_ssh "sudo -n kubeadm token create --print-join-command")"
