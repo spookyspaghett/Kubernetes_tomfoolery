@@ -76,6 +76,25 @@ It checks that all nodes are Ready and system pods are healthy, deploys nginx
 with one replica per node, then verifies the NodePort on every node and in-cluster
 DNS from a pod. It exits non-zero if any check fails.
 
+### Showcase demos
+
+Self-contained demos in [showcase/](showcase/), run on the master once the workers
+have joined. Each one prints what it is doing, waits for Enter between steps (set
+`DEMO_AUTO=1` to skip the waits), and removes itself with `--cleanup`.
+
+| Script                  | What it shows                                                              |
+|-------------------------|----------------------------------------------------------------------------|
+| `01_hostname_app.sh`    | Load balancing across pods, scaling, self-healing, draining a node         |
+| `02_rolling_update.sh`  | Zero-downtime update and rollback with live traffic                        |
+| `03_dashboard.sh`       | metrics-server + Headlamp web dashboard (prints URL and login token)       |
+| `04_autoscale.sh`       | Autoscaler adding pods under CPU load (installs metrics-server)            |
+| `05_stateful.sh`        | Redis on a persistent volume surviving pod deletion                        |
+| `06_monitoring.sh`      | Prometheus + Grafana (heavy, installs helm; ~2 GB RAM per node)            |
+| `cleanup_all.sh`        | Removes everything the demos created                                       |
+
+For the best effect, run `03_dashboard.sh` first and keep it open in a browser while
+running the others. Web UIs are served on NodePorts (30081-30090, 30300) of any node.
+
 ## Configuration
 
 Defaults can be overridden with environment variables, e.g.
